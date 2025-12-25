@@ -10,7 +10,7 @@ from homeassistant.data_entry_flow import FlowResult
 from voluptuous import Required, Schema
 
 from .constants.hass import DOMAIN, VACS
-from .EufyApi import EufyApi
+from .EufyClean import EufyClean
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,15 +35,28 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="user", data_schema=USER_SCHEMA)
         errors = {}
         try:
-            openudid = ''.join(random.choices(string.hexdigits, k=32))
             username = user_input[CONF_USERNAME]
             _LOGGER.info("Trying to login with username: {}".format(username))
             unique_id = username
-            eufy_api = EufyApi(username, user_input[CONF_PASSWORD], openudid)
-            login_resp = await eufy_api.login(validate_only=True)
-            if not login_resp.get('session'):
+            
+            eufy_clean = EufyClean(username, user_input[CONF_PASSWORD])
+            await eufy_clean.init()
+            
+            if not eufy_clean.eufyCleanApi.eufyApi.session:
                 errors["base"] = "invalid_auth"
             else:
+                # Check for unsupported devices during setup
+                unsupported = eufy_clean.eufyCleanApi.unsupported_devices
+                if unsupported:
+                    device_names = ", ".join([d.get('alias_name', d.get('name', 'Unknown')) for d in unsupported])
+                    self.hass.components.persistent_notification.async_create(
+                        f"The following Eufy devices in your account do not support the newer MQTT protocol and were not added: "
+                        f"{device_names}. "
+                        "These likely use the legacy Tuya-based protocol which this integration does not support.",
+                        title="Unsupported Eufy Devices Detected",
+                        notification_id="eufy_unsupported_devices"
+                    )
+
                 data = user_input.copy()
                 data[VACS] = {}
                 return self.async_create_entry(title=unique_id, data=user_input)

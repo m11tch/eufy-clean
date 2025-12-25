@@ -11,6 +11,7 @@ class EufyLogin(Base):
         self.sid = None
         self.mqtt_credentials = None
         self.mqtt_devices = []
+        self.unsupported_devices = []
         self.eufy_api_devices = []
 
     async def init(self):
@@ -40,6 +41,14 @@ class EufyLogin(Base):
     async def getDevices(self) -> None:
         self.eufy_api_devices = await self.eufyApi.get_cloud_device_list()
         devices = await self.eufyApi.get_device_list()
+
+        # Identify unsupported devices (in Cloud but not in MQTT list)
+        mqtt_sns = {d['device_sn'] for d in devices}
+        self.unsupported_devices = [
+            d for d in self.eufy_api_devices
+            if d['id'] not in mqtt_sns
+        ]
+
         devices = [
             {
                 **self.findModel(device['device_sn']),

@@ -26,6 +26,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     eufy_clean = EufyClean(username, password)
     await eufy_clean.init()
 
+    # Check for unsupported devices
+    unsupported = eufy_clean.eufyCleanApi.unsupported_devices
+    if unsupported:
+        device_names = ", ".join([d.get('alias_name', d.get('name', 'Unknown')) for d in unsupported])
+        _LOGGER.warning("Found %d unsupported devices in your Eufy account that do not support MQTT: %s",
+                       len(unsupported), device_names)
+
     # Load devices
     for vacuum in await eufy_clean.get_devices():
         device = await eufy_clean.init_device(vacuum['deviceId'])
